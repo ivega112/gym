@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  fullName     String
+  username     String     @unique
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  lastLogin    DateTime?
+  status       UserStatus @default(ACTIVE)
+
+  auditLogs   AuditLog[]
+  freezes     SubscriptionFreeze[]
+  backups     BackupRecord[]
+  members     Member[]             @relation("CreatedBy")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model GymSettings {
+  id                  String   @id @default("singleton")
+  gymName             String   @default("My Gym")
+  gymPhone            String?
+  address             String?
+  whatsappNumber      String?
+  whatsappCountryCode String?  @default("966")
+  expirationThreshold Int      @default(7)
+  archiveThreshold    Int      @default(17)
+  requireBackup       Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+}
+
+model Member {
+  id             String       @id @default(uuid())
+  membershipId   String       @unique // Format: GYM-000001
+  fullName       String
+  phone          String       @unique
+  secondaryPhone String?
+  gender         String?
+  dob            DateTime?
+  notes          String?
+  status         MemberStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("CreatedBy", fields: [createdById], references: [id])
+
+  subscriptions Subscription[]
+  auditLogs     AuditLog[]
+}
+
+enum MemberStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  FROZEN
+  ARCHIVED
+}
+
+model Subscription {
+  id             String             @id @default(uuid())
+  memberId       String
+  member         Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  endDate        DateTime
+  durationMonths Int
+  price          Float?
+  status         SubscriptionStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  renewals SubscriptionRenewal[]
+  freezes  SubscriptionFreeze[]
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  FROZEN
+}
+
+model SubscriptionRenewal {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  endDate        DateTime
+  durationMonths Int
+  price          Float?
+  createdAt      DateTime     @default(now())
+}
+
+model SubscriptionFreeze {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  expectedReturn DateTime?
+  unfreezeDate   DateTime?
+  frozenDays     Int? // Calculated when unfrozen
+  reason         String // e.g., Injury, Travel
+  customReason   String?
+
+  performedById String?
+  performedBy   User?   @relation(fields: [performedById], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actionType String // e.g., "MEMBER_CREATED", "SUBSCRIPTION_FROZEN"
+  message    String // Human-readable Arabic message
+  oldData    Json? // JSON Schema structured logs
+  newData    Json?
+  timestamp  DateTime @default(now())
+
+  performedById String?
+  performedBy   User?   @relation(fields: [performedById], references: [id], onDelete: SetNull)
+
+  memberId String?
+  member   Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+}
+
+model BackupRecord {
+  id        String   @id @default(uuid())
+  fileName  String
+  status    String // e.g., "GENERATED", "WHATSAPP_SENT", "MANUAL_ATTACH"
+  timestamp DateTime @default(now())
+
+  performedById String?
+  performedBy   User?   @relation(fields: [performedById], references: [id], onDelete: SetNull)
+}
