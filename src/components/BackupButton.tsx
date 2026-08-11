@@ -49,30 +49,41 @@ export function BackupButton({ className }: { className?: string }) {
         }
         
         const html2pdf = html2pdfModule;
-        const element = document.createElement("div");
-        element.innerHTML = reportResult.data;
-        // Temporarily append to DOM for accurate rendering
-        element.style.position = "absolute";
-        element.style.left = "-9999px";
-        document.body.appendChild(element);
+
+        // Isolate in an iframe to prevent Tailwind CSS (oklch/lab colors) from crashing html2canvas
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "absolute";
+        iframe.style.width = "800px";
+        iframe.style.height = "1122px"; // A4 height
+        iframe.style.left = "-9999px";
+        document.body.appendChild(iframe);
+
+        const iframeDoc = iframe.contentWindow?.document;
+        if (!iframeDoc) throw new Error("Could not create iframe document");
+        
+        iframeDoc.open();
+        iframeDoc.write(reportResult.data);
+        iframeDoc.close();
         
         const opt = {
           margin: 0,
           filename: `daily_gym_report_${dateStr}.pdf`,
           image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
           jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const }
         };
 
         let pdfBlob;
         try {
-          pdfBlob = await html2pdf().from(element).set(opt).output('blob');
+          // Add a small delay to ensure web fonts (Cairo) are loaded in the iframe
+          await new Promise(r => setTimeout(r, 500));
+          pdfBlob = await html2pdf().from(iframeDoc.body).set(opt).output('blob');
         } catch (err: any) {
-          document.body.removeChild(element);
+          document.body.removeChild(iframe);
           throw new Error("Failed to generate PDF: " + err.message);
         }
         
-        document.body.removeChild(element);
+        document.body.removeChild(iframe);
         
         // Add the generated PDF blob to the ZIP
         zip.file(`daily_gym_report_${dateStr}.pdf`, pdfBlob);
