@@ -46,20 +46,30 @@ export function BackupButton({ className }: { className?: string }) {
 
         const element = document.createElement("div");
         element.innerHTML = reportResult.data;
-        // Append to DOM so html-to-image can render it, but hide it visually
-        element.style.position = "absolute";
-        element.style.top = "-9999px";
-        element.style.left = "-9999px";
-        element.style.width = "800px"; // Fixed width for A4 proportion
+        // MUST set rtl since innerHTML strips the <html> tag
+        element.dir = "rtl";
+        // Put in viewport but hide it to avoid blank render in html-to-image
+        element.style.position = "fixed";
+        element.style.top = "0px";
+        element.style.left = "0px";
+        element.style.width = "800px";
+        element.style.zIndex = "-9999";
+        element.style.opacity = "0.01"; // completely 0 opacity sometimes gets skipped by rendering engines
+        element.style.pointerEvents = "none";
         element.style.backgroundColor = "#ffffff";
         document.body.appendChild(element);
 
-        // Wait a moment for the Cairo font to load
-        await new Promise(r => setTimeout(r, 600));
+        // Wait a moment for the Cairo font to load and browser to paint
+        await new Promise(r => setTimeout(r, 1000));
 
         let pdfBlob;
         try {
-          const dataUrl = await toPng(element, { pixelRatio: 2, quality: 0.98 });
+          const dataUrl = await toPng(element, { 
+            pixelRatio: 2, 
+            quality: 0.98,
+            skipFonts: false,
+            cacheBust: true
+          });
           
           const pdf = new jsPDF({
             orientation: "portrait",
