@@ -2,7 +2,6 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import puppeteer from "puppeteer";
 
 export async function generateDailyReportPdf() {
   try {
@@ -141,26 +140,9 @@ export async function generateDailyReportPdf() {
       </html>
     `;
 
-    // Launch Puppeteer and generate PDF
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-    const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' },
-      printBackground: true,
-    });
-    await browser.close();
-
-    // Convert Uint8Array to base64 properly
-    const base64Pdf = Buffer.from(pdfBuffer).toString('base64');
-    
-    return { success: true, data: base64Pdf };
+    return { success: true, data: htmlContent };
   } catch (error: any) {
     console.error("PDF Generation Error:", error);
-    return { success: false, error: "فشل إنشاء تقرير PDF: " + (error.message || "") };
+    return { success: false, error: "فشل إنشاء التقرير: " + (error.message || "") };
   }
 }

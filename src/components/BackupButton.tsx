@@ -35,10 +35,28 @@ export function BackupButton({ className }: { className?: string }) {
         return uint8Array;
       };
 
-      // Combine files into a single ZIP archive to bypass browser multiple-download blocks
+      // Add the JSON backup to ZIP
       const zip = new JSZip();
       zip.file(`backup_${dateStr}.json`, base64ToUint8Array(backupResult.fileData));
-      zip.file(`daily_gym_report_${dateStr}.pdf`, base64ToUint8Array(reportResult.data));
+      
+      // Use html2pdf.js to generate the PDF from the HTML string locally
+      // Ensure html2pdf is only imported on the client
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = document.createElement("div");
+      element.innerHTML = reportResult.data;
+      
+      const opt = {
+        margin: 0,
+        filename: `daily_gym_report_${dateStr}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const }
+      };
+
+      const pdfBlob = await html2pdf().from(element).set(opt).output('blob');
+      
+      // Add the generated PDF blob to the ZIP
+      zip.file(`daily_gym_report_${dateStr}.pdf`, pdfBlob);
       
       const zipBlob = await zip.generateAsync({ type: "blob" });
       const url = window.URL.createObjectURL(zipBlob);
