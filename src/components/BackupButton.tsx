@@ -47,6 +47,26 @@ export function BackupButton({ className }: { className?: string }) {
         const autoTable = (await import("jspdf-autotable")).default;
 
         const doc = new jsPDF();
+        
+        // Fetch and load Arabic font to fix gibberish characters
+        try {
+          const fontRes = await fetch('/fonts/amiri.ttf');
+          const fontBuffer = await fontRes.arrayBuffer();
+          // Convert ArrayBuffer to Base64
+          const uint8Array = new Uint8Array(fontBuffer);
+          let binaryString = '';
+          for (let i = 0; i < uint8Array.length; i++) {
+            binaryString += String.fromCharCode(uint8Array[i]);
+          }
+          const base64Font = btoa(binaryString);
+          
+          doc.addFileToVFS('Amiri.ttf', base64Font);
+          doc.addFont('Amiri.ttf', 'Amiri', 'normal');
+          doc.setFont('Amiri');
+        } catch (fontErr) {
+          console.warn("Could not load Arabic font", fontErr);
+        }
+
         const data = reportResult.data as any; // Type assertion since it's raw JSON now
         
         // Document Header
@@ -66,6 +86,7 @@ export function BackupButton({ className }: { className?: string }) {
           
           doc.setFontSize(16);
           doc.setTextColor(20, 20, 20);
+          doc.setFont('Amiri'); // Apply Arabic font to title too
           doc.text(title, 14, startY + 10);
           
           autoTable(doc, {
@@ -73,8 +94,8 @@ export function BackupButton({ className }: { className?: string }) {
             head: [columns],
             body: rows,
             theme: 'grid',
-            headStyles: { fillColor: [31, 78, 121], textColor: 255 },
-            styles: { font: "helvetica", fontSize: 10 },
+            headStyles: { fillColor: [31, 78, 121], textColor: 255, font: 'Amiri', halign: 'right' },
+            styles: { font: "Amiri", fontSize: 10, halign: 'right' },
             margin: { left: 14, right: 14 },
           });
           
