@@ -36,76 +36,98 @@ export function BackupButton({ className }: { className?: string }) {
           return uint8Array;
         };
 
-        // Add the JSON backup to ZIP
+        // Initialize ZIP
         const zip = new JSZip();
-        zip.file(`backup_${dateStr}.json`, base64ToUint8Array(backupResult.fileData));
         
-        // Dynamic imports for PDF generation
-        const { toPng } = await import("html-to-image");
+        // 1. Add the JSON backup to ZIP
+        zip.file("backup.json", base64ToUint8Array(backupResult.fileData));
+        
+        // 2. Generate PDF using jspdf and jspdf-autotable
         const { jsPDF } = await import("jspdf");
+        const autoTable = (await import("jspdf-autotable")).default;
 
-        const element = document.createElement("div");
-        element.innerHTML = reportResult.data;
-        // MUST set rtl since innerHTML strips the <html> tag
-        element.dir = "rtl";
-        // Put in viewport but hide it to avoid blank render in html-to-image
-        element.style.position = "fixed";
-        element.style.top = "0px";
-        element.style.left = "0px";
-        element.style.width = "800px";
-        element.style.zIndex = "-9999";
-        element.style.opacity = "0.01"; // completely 0 opacity sometimes gets skipped by rendering engines
-        element.style.pointerEvents = "none";
-        element.style.backgroundColor = "#ffffff";
-        document.body.appendChild(element);
+        const doc = new jsPDF();
+        const data = reportResult.data as any; // Type assertion since it's raw JSON now
+        
+        // Document Header
+        doc.setFontSize(22);
+        doc.setTextColor(40, 40, 40);
+        doc.text("GYM SYSTEM REPORT", 105, 20, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Date: ${dateStr}`, 105, 30, { align: "center" });
 
-        // Wait a moment for the Cairo font to load and browser to paint
-        await new Promise(r => setTimeout(r, 1000));
-
-        let pdfBlob;
-        try {
-          const dataUrl = await toPng(element, { 
-            pixelRatio: 2, 
-            quality: 0.98,
-            skipFonts: false,
-            cacheBust: true
+        // Helper to generate tables
+        let startY = 40;
+        
+        const createTable = (title: string, columns: string[], rows: any[]) => {
+          if (rows.length === 0) return;
+          
+          doc.setFontSize(16);
+          doc.setTextColor(20, 20, 20);
+          doc.text(title, 14, startY + 10);
+          
+          autoTable(doc, {
+            startY: startY + 15,
+            head: [columns],
+            body: rows,
+            theme: 'grid',
+            headStyles: { fillColor: [31, 78, 121], textColor: 255 },
+            styles: { font: "helvetica", fontSize: 10 },
+            margin: { left: 14, right: 14 },
           });
           
-          const pdf = new jsPDF({
-            orientation: "portrait",
-            unit: "pt",
-            format: "a4" // A4 size: 595.28 x 841.89 pt
-          });
-          
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
-          
-          pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-          pdfBlob = pdf.output("blob");
-        } catch (err: any) {
-          document.body.removeChild(element);
-          throw new Error("Failed to generate PDF: " + err.message);
-        }
+          startY = (doc as any).lastAutoTable.finalY + 10;
+        };
+
+        // Active Subscriptions Table
+        const activeRows = data.activeSubs.map((s: any) => [
+          s.membershipId, 
+          s.fullName, 
+          s.phone, 
+          new Date(s.endDate).toLocaleDateString()
+        ]);
+        createTable("Active Subscriptions", ["ID", "Name", "Phone", "End Date"], activeRows);
+
+        // Frozen Subscriptions Table
+        const frozenRows = data.frozenSubs.map((s: any) => [
+          s.membershipId, 
+          s.fullName, 
+          s.phone
+        ]);
+        createTable("Frozen Subscriptions", ["ID", "Name", "Phone"], frozenRows);
+
+        // Expired Subscriptions Table
+        const expiredRows = data.expiredSubs.map((s: any) => [
+          s.membershipId, 
+          s.fullName, 
+          s.phone, 
+          new Date(s.endDate).toLocaleDateString()
+        ]);
+        createTable("Expired Subscriptions", ["ID", "Name", "Phone", "End Date"], expiredRows);
+
+        // Get PDF Blob
+        const pdfBlob = doc.output("blob");
         
-        document.body.removeChild(element);
+        // Add PDF to ZIP
+        zip.file("daily_gym_report.pdf", pdfBlob);
         
-        // Add the generated PDF file to the ZIP
-        zip.file(`daily_gym_report_${dateStr}.pdf`, pdfBlob);
-        
+        // 3. Trigger ZIP Download
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const url = window.URL.createObjectURL(zipBlob);
         
         const a = document.createElement("a");
         a.href = url;
-        a.download = `gym_backup_and_report_${dateStr}.zip`;
+        a.download = `Gym_Backup_${dateStr}.zip`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
 
-        // 3. Open WhatsApp if a number is configured
+        // 4. Open WhatsApp Dispatch
         if (backupResult.whatsappNumber) {
-          const text = `تم تجهيز النسخة الاحتياطية (JSON) وتقرير الاشتراكات (PDF). يرجى إرفاق ملف الـ (ZIP) المضغوط في هذه المحادثة لحفظهما معاً.`;
+          const text = `تم تجهيز ملف النسخة الاحتياطية الشامل (ZIP) والذي يحتوي على التقرير (PDF) وبيانات النظام (JSON). يرجى إرفاق الملف هنا لحفظه.`;
           const cleanNumber = backupResult.whatsappNumber.replace(/\D/g, '').replace(/^0/, '966');
           const waUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
           window.open(waUrl, "_blank");
@@ -113,7 +135,7 @@ export function BackupButton({ className }: { className?: string }) {
           alert("تم استخراج النسخة والتقرير بنجاح.");
         }
         
-        // Reload page to clear warnings
+        // Reload page to clear state
         setTimeout(() => {
           window.location.reload();
         }, 500);
