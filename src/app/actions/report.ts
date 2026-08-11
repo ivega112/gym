@@ -23,30 +23,24 @@ export async function generateDailyReportPdf() {
       include: { member: true },
     });
 
-    // Build the HTML template
+    // Build the HTML template as a single root div so it works nicely with innerHTML
     const htmlContent = `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
+      <div id="gym-report-container" dir="rtl" style="font-family: Arial, sans-serif; padding: 40px; color: #111; background-color: #ffffff; width: 100%; min-height: 100%;">
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-          body { font-family: 'Cairo', sans-serif; padding: 40px; color: #333; }
-          .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-          .english-title { font-family: sans-serif; font-size: 28px; font-weight: bold; letter-spacing: 2px; margin: 0; color: #111; }
-          .arabic-subtitle { font-size: 16px; color: #666; margin-top: 10px; }
-          h2 { color: #222; font-size: 20px; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-          table { border-collapse: collapse; margin-top: 15px; width: 100%; font-size: 14px; }
-          th, td { border: 1px solid #ddd; padding: 10px; text-align: right; }
-          th { background-color: #f9f9f9; font-weight: bold; }
-          .metrics { display: flex; justify-content: space-around; margin-bottom: 30px; background: #f8fafc; padding: 15px; border-radius: 8px; }
-          .metric-box { text-align: center; }
-          .metric-value { font-size: 24px; font-weight: bold; color: #0f172a; }
-          .metric-label { font-size: 12px; color: #64748b; }
-          .empty-state { text-align: center; color: #94a3b8; padding: 20px; font-style: italic; }
+          #gym-report-container .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+          #gym-report-container .english-title { font-family: sans-serif; font-size: 28px; font-weight: bold; letter-spacing: 2px; margin: 0; color: #111; }
+          #gym-report-container .arabic-subtitle { font-size: 16px; color: #666; margin-top: 10px; }
+          #gym-report-container h2 { color: #222; font-size: 20px; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+          #gym-report-container table { border-collapse: collapse; margin-top: 15px; width: 100%; font-size: 14px; }
+          #gym-report-container th, #gym-report-container td { border: 1px solid #ddd; padding: 10px; text-align: right; }
+          #gym-report-container th { background-color: #f9f9f9; font-weight: bold; }
+          #gym-report-container .metrics { display: flex; justify-content: space-around; margin-bottom: 30px; background: #f8fafc; padding: 15px; border-radius: 8px; }
+          #gym-report-container .metric-box { text-align: center; }
+          #gym-report-container .metric-value { font-size: 24px; font-weight: bold; color: #0f172a; }
+          #gym-report-container .metric-label { font-size: 12px; color: #64748b; }
+          #gym-report-container .empty-state { text-align: center; color: #94a3b8; padding: 20px; font-style: italic; }
         </style>
-      </head>
-      <body>
+        
         <div class="header">
           <h1 class="english-title">GYM SYSTEM REPORT</h1>
           <div class="arabic-subtitle">التقرير اليومي للاشتراكات - ${today.toLocaleDateString('ar-SA')}</div>
@@ -136,8 +130,7 @@ export async function generateDailyReportPdf() {
           </tbody>
         </table>
         ` : '<div class="empty-state">لا توجد اشتراكات منتهية.</div>'}
-      </body>
-      </html>
+      </div>
     `;
 
     return { success: true, data: htmlContent };
