@@ -2,9 +2,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import ExcelJS from "exceljs";
 
-export async function generateDailyReportExcel() {
+export async function generateDailyReportPdf() {
   try {
     const today = new Date();
     
@@ -24,87 +23,126 @@ export async function generateDailyReportExcel() {
       include: { member: true },
     });
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Gym System';
-    workbook.created = today;
+    // Build the HTML template
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+          body { font-family: 'Cairo', sans-serif; padding: 40px; color: #333; }
+          .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+          .english-title { font-family: sans-serif; font-size: 28px; font-weight: bold; letter-spacing: 2px; margin: 0; color: #111; }
+          .arabic-subtitle { font-size: 16px; color: #666; margin-top: 10px; }
+          h2 { color: #222; font-size: 20px; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+          table { border-collapse: collapse; margin-top: 15px; width: 100%; font-size: 14px; }
+          th, td { border: 1px solid #ddd; padding: 10px; text-align: right; }
+          th { background-color: #f9f9f9; font-weight: bold; }
+          .metrics { display: flex; justify-content: space-around; margin-bottom: 30px; background: #f8fafc; padding: 15px; border-radius: 8px; }
+          .metric-box { text-align: center; }
+          .metric-value { font-size: 24px; font-weight: bold; color: #0f172a; }
+          .metric-label { font-size: 12px; color: #64748b; }
+          .empty-state { text-align: center; color: #94a3b8; padding: 20px; font-style: italic; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1 class="english-title">GYM SYSTEM REPORT</h1>
+          <div class="arabic-subtitle">التقرير اليومي للاشتراكات - ${today.toLocaleDateString('ar-SA')}</div>
+        </div>
 
-    // Helper to style headers
-    const styleHeader = (row: ExcelJS.Row) => {
-      row.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-      row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
-      row.alignment = { horizontal: 'center' };
-    };
+        <div class="metrics">
+          <div class="metric-box">
+            <div class="metric-value">${activeSubs.length}</div>
+            <div class="metric-label">اشتراكات نشطة</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-value">${frozenSubs.length}</div>
+            <div class="metric-label">اشتراكات مجمدة</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-value">${expiredSubs.length}</div>
+            <div class="metric-label">اشتراكات منتهية</div>
+          </div>
+        </div>
 
-    // ACTIVE SUBSCRIPTIONS SHEET
-    const activeSheet = workbook.addWorksheet('الاشتراكات النشطة', { views: [{ rightToLeft: true }] });
-    activeSheet.columns = [
-      { header: 'رقم العضوية', key: 'id', width: 15 },
-      { header: 'الاسم', key: 'name', width: 30 },
-      { header: 'رقم الجوال', key: 'phone', width: 20 },
-      { header: 'تاريخ الانتهاء', key: 'end', width: 15 },
-    ];
-    styleHeader(activeSheet.getRow(1));
-    activeSubs.forEach(s => {
-      activeSheet.addRow({
-        id: s.member.membershipId,
-        name: s.member.fullName,
-        phone: s.member.phone,
-        end: new Date(s.endDate).toLocaleDateString('ar-SA')
-      });
-    });
+        <h2>الاشتراكات النشطة</h2>
+        ${activeSubs.length > 0 ? `
+        <table>
+          <thead>
+            <tr>
+              <th>رقم العضوية</th>
+              <th>الاسم</th>
+              <th>رقم الجوال</th>
+              <th>تاريخ الانتهاء</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${activeSubs.map(s => `
+              <tr>
+                <td>${s.member.membershipId}</td>
+                <td>${s.member.fullName}</td>
+                <td>${s.member.phone}</td>
+                <td>${new Date(s.endDate).toLocaleDateString('ar-SA')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : '<div class="empty-state">لا توجد اشتراكات نشطة.</div>'}
 
-    // FROZEN SUBSCRIPTIONS SHEET
-    const frozenSheet = workbook.addWorksheet('الاشتراكات المجمدة', { views: [{ rightToLeft: true }] });
-    frozenSheet.columns = [
-      { header: 'رقم العضوية', key: 'id', width: 15 },
-      { header: 'الاسم', key: 'name', width: 30 },
-      { header: 'رقم الجوال', key: 'phone', width: 20 },
-    ];
-    styleHeader(frozenSheet.getRow(1));
-    frozenSubs.forEach(s => {
-      frozenSheet.addRow({
-        id: s.member.membershipId,
-        name: s.member.fullName,
-        phone: s.member.phone
-      });
-    });
+        <h2>الاشتراكات المجمدة</h2>
+        ${frozenSubs.length > 0 ? `
+        <table>
+          <thead>
+            <tr>
+              <th>رقم العضوية</th>
+              <th>الاسم</th>
+              <th>رقم الجوال</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${frozenSubs.map(s => `
+              <tr>
+                <td>${s.member.membershipId}</td>
+                <td>${s.member.fullName}</td>
+                <td>${s.member.phone}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : '<div class="empty-state">لا توجد اشتراكات مجمدة.</div>'}
 
-    // EXPIRED SUBSCRIPTIONS SHEET
-    const expiredSheet = workbook.addWorksheet('الاشتراكات المنتهية', { views: [{ rightToLeft: true }] });
-    expiredSheet.columns = [
-      { header: 'رقم العضوية', key: 'id', width: 15 },
-      { header: 'الاسم', key: 'name', width: 30 },
-      { header: 'رقم الجوال', key: 'phone', width: 20 },
-      { header: 'تاريخ الانتهاء', key: 'end', width: 15 },
-    ];
-    styleHeader(expiredSheet.getRow(1));
-    expiredSubs.forEach(s => {
-      expiredSheet.addRow({
-        id: s.member.membershipId,
-        name: s.member.fullName,
-        phone: s.member.phone,
-        end: new Date(s.endDate).toLocaleDateString('ar-SA')
-      });
-    });
+        <h2>الاشتراكات المنتهية</h2>
+        ${expiredSubs.length > 0 ? `
+        <table>
+          <thead>
+            <tr>
+              <th>رقم العضوية</th>
+              <th>الاسم</th>
+              <th>رقم الجوال</th>
+              <th>تاريخ الانتهاء</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${expiredSubs.map(s => `
+              <tr>
+                <td>${s.member.membershipId}</td>
+                <td>${s.member.fullName}</td>
+                <td>${s.member.phone}</td>
+                <td>${new Date(s.endDate).toLocaleDateString('ar-SA')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : '<div class="empty-state">لا توجد اشتراكات منتهية.</div>'}
+      </body>
+      </html>
+    `;
 
-    // SUMMARY SHEET
-    const summarySheet = workbook.addWorksheet('ملخص', { views: [{ rightToLeft: true }] });
-    summarySheet.columns = [
-      { header: 'الحالة', key: 'status', width: 25 },
-      { header: 'العدد', key: 'count', width: 15 },
-    ];
-    styleHeader(summarySheet.getRow(1));
-    summarySheet.addRow({ status: 'الاشتراكات النشطة', count: activeSubs.length });
-    summarySheet.addRow({ status: 'الاشتراكات المجمدة', count: frozenSubs.length });
-    summarySheet.addRow({ status: 'الاشتراكات المنتهية', count: expiredSubs.length });
-
-    // Generate buffer
-    const buffer = await workbook.xlsx.writeBuffer();
-    const base64Data = Buffer.from(buffer).toString('base64');
-
-    return { success: true, data: base64Data };
+    return { success: true, data: htmlContent };
   } catch (error: any) {
-    console.error("Excel Generation Error:", error);
-    return { success: false, error: "فشل إنشاء تقرير Excel: " + (error.message || "") };
+    console.error("PDF Generation Error:", error);
+    return { success: false, error: "فشل إنشاء التقرير: " + (error.message || "") };
   }
 }

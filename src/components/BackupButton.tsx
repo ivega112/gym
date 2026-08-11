@@ -3,7 +3,7 @@
 import { useState } from "react";
 import JSZip from "jszip";
 import { generateBackup } from "@/app/actions/backup";
-import { generateDailyReportExcel } from "@/app/actions/report";
+import { generateDailyReportPdf } from "@/app/actions/report";
 import { Button } from "@/components/ui/button";
 import { DatabaseBackup, Loader2 } from "lucide-react";
 
@@ -16,7 +16,7 @@ export function BackupButton({ className }: { className?: string }) {
     // Run both generations in parallel
     const [backupResult, reportResult] = await Promise.all([
       generateBackup(),
-      generateDailyReportExcel()
+      generateDailyReportPdf()
     ]);
     
     setIsBackingUp(false);
@@ -40,8 +40,47 @@ export function BackupButton({ className }: { className?: string }) {
         const zip = new JSZip();
         zip.file(`backup_${dateStr}.json`, base64ToUint8Array(backupResult.fileData));
         
-        // Add the generated Excel (.xlsx) file to the ZIP
-        zip.file(`daily_gym_report_${dateStr}.xlsx`, base64ToUint8Array(reportResult.data));
+        // Dynamic imports for PDF generation
+        const { toPng } = await import("html-to-image");
+        const { jsPDF } = await import("jspdf");
+
+        const element = document.createElement("div");
+        element.innerHTML = reportResult.data;
+        // Append to DOM so html-to-image can render it, but hide it visually
+        element.style.position = "absolute";
+        element.style.top = "-9999px";
+        element.style.left = "-9999px";
+        element.style.width = "800px"; // Fixed width for A4 proportion
+        element.style.backgroundColor = "#ffffff";
+        document.body.appendChild(element);
+
+        // Wait a moment for the Cairo font to load
+        await new Promise(r => setTimeout(r, 600));
+
+        let pdfBlob;
+        try {
+          const dataUrl = await toPng(element, { pixelRatio: 2, quality: 0.98 });
+          
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "pt",
+            format: "a4" // A4 size: 595.28 x 841.89 pt
+          });
+          
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
+          
+          pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          pdfBlob = pdf.output("blob");
+        } catch (err: any) {
+          document.body.removeChild(element);
+          throw new Error("Failed to generate PDF: " + err.message);
+        }
+        
+        document.body.removeChild(element);
+        
+        // Add the generated PDF file to the ZIP
+        zip.file(`daily_gym_report_${dateStr}.pdf`, pdfBlob);
         
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const url = window.URL.createObjectURL(zipBlob);
@@ -56,7 +95,7 @@ export function BackupButton({ className }: { className?: string }) {
 
         // 3. Open WhatsApp if a number is configured
         if (backupResult.whatsappNumber) {
-          const text = `تم تجهيز النسخة الاحتياطية (JSON) وتقرير الاشتراكات (Excel). يرجى إرفاق ملف الـ (ZIP) المضغوط في هذه المحادثة لحفظهما معاً.`;
+          const text = `تم تجهيز النسخة الاحتياطية (JSON) وتقرير الاشتراكات (PDF). يرجى إرفاق ملف الـ (ZIP) المضغوط في هذه المحادثة لحفظهما معاً.`;
           const cleanNumber = backupResult.whatsappNumber.replace(/\D/g, '').replace(/^0/, '966');
           const waUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
           window.open(waUrl, "_blank");
