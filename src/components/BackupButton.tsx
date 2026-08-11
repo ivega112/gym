@@ -3,7 +3,7 @@
 import { useState } from "react";
 import JSZip from "jszip";
 import { generateBackup } from "@/app/actions/backup";
-import { generateDailyReportPdf } from "@/app/actions/report";
+import { generateDailyReportExcel } from "@/app/actions/report";
 import { Button } from "@/components/ui/button";
 import { DatabaseBackup, Loader2 } from "lucide-react";
 
@@ -16,7 +16,7 @@ export function BackupButton({ className }: { className?: string }) {
     // Run both generations in parallel
     const [backupResult, reportResult] = await Promise.all([
       generateBackup(),
-      generateDailyReportPdf()
+      generateDailyReportExcel()
     ]);
     
     setIsBackingUp(false);
@@ -40,53 +40,8 @@ export function BackupButton({ className }: { className?: string }) {
         const zip = new JSZip();
         zip.file(`backup_${dateStr}.json`, base64ToUint8Array(backupResult.fileData));
         
-        // Use html2pdf.js to generate the PDF from the HTML string locally
-        let html2pdfModule;
-        try {
-          html2pdfModule = (await import("html2pdf.js")).default;
-        } catch (err: any) {
-          throw new Error("Failed to load PDF library: " + err.message);
-        }
-        
-        const html2pdf = html2pdfModule;
-
-        // Isolate in an iframe to prevent Tailwind CSS (oklch/lab colors) from crashing html2canvas
-        const iframe = document.createElement("iframe");
-        iframe.style.position = "absolute";
-        iframe.style.width = "800px";
-        iframe.style.height = "1122px"; // A4 height
-        iframe.style.left = "-9999px";
-        document.body.appendChild(iframe);
-
-        const iframeDoc = iframe.contentWindow?.document;
-        if (!iframeDoc) throw new Error("Could not create iframe document");
-        
-        iframeDoc.open();
-        iframeDoc.write(reportResult.data);
-        iframeDoc.close();
-        
-        const opt = {
-          margin: 0,
-          filename: `daily_gym_report_${dateStr}.pdf`,
-          image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const }
-        };
-
-        let pdfBlob;
-        try {
-          // Add a small delay to ensure web fonts (Cairo) are loaded in the iframe
-          await new Promise(r => setTimeout(r, 500));
-          pdfBlob = await html2pdf().from(iframeDoc.body).set(opt).output('blob');
-        } catch (err: any) {
-          document.body.removeChild(iframe);
-          throw new Error("Failed to generate PDF: " + err.message);
-        }
-        
-        document.body.removeChild(iframe);
-        
-        // Add the generated PDF blob to the ZIP
-        zip.file(`daily_gym_report_${dateStr}.pdf`, pdfBlob);
+        // Add the generated Excel (.xlsx) file to the ZIP
+        zip.file(`daily_gym_report_${dateStr}.xlsx`, base64ToUint8Array(reportResult.data));
         
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const url = window.URL.createObjectURL(zipBlob);
@@ -101,12 +56,12 @@ export function BackupButton({ className }: { className?: string }) {
 
         // 3. Open WhatsApp if a number is configured
         if (backupResult.whatsappNumber) {
-          const text = `تم تجهيز النسخة الاحتياطية (JSON) وتقرير الاشتراكات (PDF). يرجى إرفاق ملف الـ (ZIP) المضغوط في هذه المحادثة لحفظهما معاً.`;
+          const text = `تم تجهيز النسخة الاحتياطية (JSON) وتقرير الاشتراكات (Excel). يرجى إرفاق ملف الـ (ZIP) المضغوط في هذه المحادثة لحفظهما معاً.`;
           const cleanNumber = backupResult.whatsappNumber.replace(/\D/g, '').replace(/^0/, '966');
           const waUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
           window.open(waUrl, "_blank");
         } else {
-          alert("Backup and Report generated successfully. No WhatsApp number configured.");
+          alert("تم استخراج النسخة والتقرير بنجاح.");
         }
         
         // Reload page to clear warnings
